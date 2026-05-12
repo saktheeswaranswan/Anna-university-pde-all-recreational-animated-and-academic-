@@ -1,0 +1,822 @@
+//
+// APDE ANDROID
+// MASSIVE PDE PATCH GRID VISUALIZER
+// 5 x 6 = 30 PATCHES
+// ALL SAME BOUNDARY CONDITIONS
+// TOUCH SLIDER TO ELEVATE PATCH
+// AUTO FIT TO SCREEN
+// PROCESSING P3D
+//
+
+int N = 40;
+
+float[][] laplace;
+
+float rotX = PI/3.4;
+float rotY = 0;
+
+float zoom = 0.18;
+
+float time = 0;
+
+//
+// GRID
+//
+
+int COLS = 5;
+int ROWS = 6;
+
+int PATCH_SPACING = 330;
+
+//
+// PATCH HEIGHT CONTROL
+//
+
+float[] patchLift = new float[30];
+
+//
+// SLIDER
+//
+
+float sliderX;
+float sliderY;
+float sliderW = 500;
+float sliderH = 24;
+
+boolean draggingSlider = false;
+
+float sliderValue = 0.5;
+
+//
+// ACTIVE PATCH
+//
+
+int selectedPatch = 0;
+
+//
+// NAMES
+//
+
+String[] names = {
+
+  "LAPLACE",
+  "SINE",
+  "RIPPLE",
+  "GAUSSIAN",
+  "SADDLE",
+
+  "CONE",
+  "PARABOLOID",
+  "BOWL",
+  "MEXICAN",
+  "WAVES",
+
+  "CROSS",
+  "SPIRAL",
+  "VOLCANO",
+  "COSMIC",
+  "TERRAIN",
+
+  "FRACTAL",
+  "SHOCK",
+  "EM",
+  "BLACKHOLE",
+  "DOUBLE",
+
+  "LAPLACE MIX",
+  "HYPER",
+  "DNA",
+  "QUANTUM",
+  "CYLINDER",
+
+  "ARC",
+  "DOME",
+  "CRATER",
+  "TORNADO",
+  "PLASMA"
+};
+
+void setup() {
+
+  fullScreen(P3D);
+
+  smooth(8);
+
+  laplace = new float[N][N];
+
+  buildLaplace();
+
+  //
+  // INITIAL HEIGHTS
+  //
+
+  for(int i=0;i<30;i++) {
+
+    patchLift[i] = 0;
+  }
+
+  //
+  // SLIDER POSITION
+  //
+
+  sliderX = width*0.5 - sliderW*0.5;
+  sliderY = height - 70;
+}
+
+void draw() {
+
+  background(0);
+
+  lights();
+
+  time += 0.01;
+
+  //
+  // APPLY SLIDER TO ACTIVE PATCH
+  //
+
+  patchLift[selectedPatch] = map(
+    sliderValue,
+    0,
+    1,
+    -200,
+    300
+  );
+
+  //
+  // WORLD
+  //
+
+  pushMatrix();
+
+  translate(width*0.5,height*0.48);
+
+  scale(zoom);
+
+  rotateX(rotX);
+
+  rotateZ(rotY);
+
+  //
+  // DRAW GRID
+  //
+
+  int index = 0;
+
+  for(int gy=0; gy<ROWS; gy++) {
+
+    for(int gx=0; gx<COLS; gx++) {
+
+      if(index>=30) break;
+
+      pushMatrix();
+
+      translate(
+        (gx-(COLS-1)/2.0)*PATCH_SPACING,
+        (gy-(ROWS-1)/2.0)*PATCH_SPACING,
+        patchLift[index]
+      );
+
+      drawPatch(index);
+
+      popMatrix();
+
+      index++;
+    }
+  }
+
+  popMatrix();
+
+  drawHUD();
+
+  drawSlider();
+}
+
+//
+// DRAW PATCH
+//
+
+void drawPatch(int mode) {
+
+  noStroke();
+
+  for(int y=0; y<N-1; y++) {
+
+    beginShape(TRIANGLE_STRIP);
+
+    for(int x=0; x<N; x++) {
+
+      float z1 = getZ(mode,x,y);
+
+      float z2 = getZ(mode,x,y+1);
+
+      //
+      // COLOR
+      //
+
+      fill(
+        constrain(120+z1*1.2,0,255),
+        constrain(140+z1*0.6,0,255),
+        constrain(255-z1*0.7,0,255)
+      );
+
+      vertex(x*8,y*8,z1);
+
+      fill(
+        constrain(120+z2*1.2,0,255),
+        constrain(140+z2*0.6,0,255),
+        constrain(255-z2*0.7,0,255)
+      );
+
+      vertex(x*8,(y+1)*8,z2);
+    }
+
+    endShape();
+  }
+
+  //
+  // OUTLINE
+  //
+
+  stroke(255,70);
+
+  noFill();
+
+  rect(0,0,N*8,N*8);
+
+  //
+  // LABEL
+  //
+
+  pushMatrix();
+
+  translate(60,N*8+40,0);
+
+  rotateX(-rotX);
+
+  rotateZ(-rotY);
+
+  fill(255);
+
+  textSize(22);
+
+  text(names[mode],0,0);
+
+  popMatrix();
+}
+
+//
+// SURFACES
+//
+
+float getZ(int mode,int x,int y) {
+
+  float dx = x-N/2.0;
+
+  float dy = y-N/2.0;
+
+  float r = sqrt(dx*dx+dy*dy);
+
+  float a = atan2(dy,dx);
+
+  //
+  // ALL PATCHES USE SAME LAPLACE BASE
+  //
+
+  float base = laplace[x][y];
+
+  //
+  // 0
+  //
+
+  if(mode==0) {
+
+    return base;
+  }
+
+  //
+  // 1
+  //
+
+  if(mode==1) {
+
+    return base + 40*sin(x*0.2);
+  }
+
+  //
+  // 2
+  //
+
+  if(mode==2) {
+
+    return base + 50*sin(r*0.2);
+  }
+
+  //
+  // 3
+  //
+
+  if(mode==3) {
+
+    return base + 120*exp(-r*0.05);
+  }
+
+  //
+  // 4
+  //
+
+  if(mode==4) {
+
+    return base + (dx*dx-dy*dy)*0.15;
+  }
+
+  //
+  // 5
+  //
+
+  if(mode==5) {
+
+    return base + r*4;
+  }
+
+  //
+  // 6
+  //
+
+  if(mode==6) {
+
+    return base + (dx*dx+dy*dy)*0.08;
+  }
+
+  //
+  // 7
+  //
+
+  if(mode==7) {
+
+    return base - (dx*dx+dy*dy)*0.08;
+  }
+
+  //
+  // 8
+  //
+
+  if(mode==8) {
+
+    return base + 80*cos(r*0.2)/(1+r*0.05);
+  }
+
+  //
+  // 9
+  //
+
+  if(mode==9) {
+
+    return base + 40*sin(x*0.2+y*0.2+time);
+  }
+
+  //
+  // 10
+  //
+
+  if(mode==10) {
+
+    return base + 50*sin(x*0.15)*sin(y*0.15);
+  }
+
+  //
+  // 11
+  //
+
+  if(mode==11) {
+
+    return base + 70*sin(r*0.2+a*5);
+  }
+
+  //
+  // 12
+  //
+
+  if(mode==12) {
+
+    return base + 100*exp(-r*0.05)-60*exp(-r*0.2);
+  }
+
+  //
+  // 13
+  //
+
+  if(mode==13) {
+
+    return base + 30*(sin(x*0.1)+cos(y*0.1));
+  }
+
+  //
+  // 14
+  //
+
+  if(mode==14) {
+
+    return base + noise(x*0.05,y*0.05)*120;
+  }
+
+  //
+  // 15
+  //
+
+  if(mode==15) {
+
+    return base
+      + noise(x*0.03,y*0.03)*80
+      + noise(x*0.1,y*0.1)*30;
+  }
+
+  //
+  // 16
+  //
+
+  if(mode==16) {
+
+    return base + 80*sin(r*0.3)/(1+r*0.04);
+  }
+
+  //
+  // 17
+  //
+
+  if(mode==17) {
+
+    return base + 220/(r+1);
+  }
+
+  //
+  // 18
+  //
+
+  if(mode==18) {
+
+    return base - 120*log(r+1);
+  }
+
+  //
+  // 19
+  //
+
+  if(mode==19) {
+
+    return base
+      + 100*exp(-((dx+8)*(dx+8)+(dy+8)*(dy+8))*0.02)
+      + 100*exp(-((dx-8)*(dx-8)+(dy-8)*(dy-8))*0.02);
+  }
+
+  //
+  // 20
+  //
+
+  if(mode==20) {
+
+    return base + 30*sin(x*0.3)*cos(y*0.3);
+  }
+
+  //
+  // 21
+  //
+
+  if(mode==21) {
+
+    return base + 100/(dx*dx-dy*dy+1);
+  }
+
+  //
+  // 22
+  //
+
+  if(mode==22) {
+
+    return base + 60*sin(x*0.2+y*0.4);
+  }
+
+  //
+  // 23
+  //
+
+  if(mode==23) {
+
+    return base
+      + 30*sin(x*0.15)
+      + 30*cos(y*0.15)
+      + 20*sin((x+y)*0.2);
+  }
+
+  //
+  // 24
+  //
+
+  if(mode==24) {
+
+    return base + 40*cos(r*0.2);
+  }
+
+  //
+  // 25
+  //
+
+  if(mode==25) {
+
+    return base + 60*tan((x+y)*0.01);
+  }
+
+  //
+  // 26
+  //
+
+  if(mode==26) {
+
+    float rr = dx*dx+dy*dy;
+
+    return base + sqrt(max(0,25000-rr));
+  }
+
+  //
+  // 27
+  //
+
+  if(mode==27) {
+
+    return base - 90*exp(-r*0.08);
+  }
+
+  //
+  // 28
+  //
+
+  if(mode==28) {
+
+    return base + 50*sin(a*8);
+  }
+
+  //
+  // 29
+  //
+
+  if(mode==29) {
+
+    return base
+      + 40*sin(x*0.1)
+      + 40*cos(y*0.1)
+      + 40*sin((x+y)*0.15+time);
+  }
+
+  return 0;
+}
+
+//
+// BUILD LAPLACE
+//
+
+void buildLaplace() {
+
+  //
+  // SAME BOUNDARY CONDITIONS
+  //
+
+  for(int i=0;i<N;i++) {
+
+    float x = map(i,0,N-1,0,TWO_PI);
+
+    //
+    // TOP
+    //
+
+    laplace[i][0] = 100*sin(x);
+
+    //
+    // BOTTOM
+    //
+
+    laplace[i][N-1] = x*x;
+
+    //
+    // LEFT
+    //
+
+    laplace[0][i] = 50*cos(x);
+
+    //
+    // RIGHT
+    //
+
+    laplace[N-1][i] = 25*sin(x);
+  }
+
+  //
+  // RELAXATION
+  //
+
+  for(int iter=0; iter<5000; iter++) {
+
+    for(int i=1;i<N-1;i++) {
+
+      for(int j=1;j<N-1;j++) {
+
+        laplace[i][j] = 0.25*(
+
+          laplace[i+1][j] +
+          laplace[i-1][j] +
+          laplace[i][j+1] +
+          laplace[i][j-1]
+        );
+      }
+    }
+  }
+}
+
+//
+// HUD
+//
+
+void drawHUD() {
+
+  fill(255);
+
+  textSize(28);
+
+  text(
+    "30 PDE PATCHES  |  TOUCH PATCH TO SELECT  |  SLIDER = Z ELEVATION",
+    20,
+    40
+  );
+
+  textSize(22);
+
+  text(
+    "ACTIVE PATCH : " + names[selectedPatch],
+    20,
+    80
+  );
+
+  text(
+    "DRAG = ROTATE    + / - = ZOOM",
+    20,
+    120
+  );
+}
+
+//
+// SLIDER
+//
+
+void drawSlider() {
+
+  //
+  // BAR
+  //
+
+  noStroke();
+
+  fill(60);
+
+  rect(sliderX,sliderY,sliderW,sliderH,20);
+
+  //
+  // FILL
+  //
+
+  fill(0,200,255);
+
+  rect(
+    sliderX,
+    sliderY,
+    sliderW*sliderValue,
+    sliderH,
+    20
+  );
+
+  //
+  // HANDLE
+  //
+
+  float knobX = sliderX + sliderW*sliderValue;
+
+  fill(255);
+
+  ellipse(
+    knobX,
+    sliderY+sliderH*0.5,
+    40,
+    40
+  );
+
+  //
+  // LABEL
+  //
+
+  fill(255);
+
+  textSize(20);
+
+  text(
+    "PATCH HEIGHT",
+    sliderX,
+    sliderY-15
+  );
+}
+
+//
+// TOUCH
+//
+
+void mousePressed() {
+
+  //
+  // SLIDER TOUCH
+  //
+
+  if(
+    mouseX > sliderX &&
+    mouseX < sliderX+sliderW &&
+    mouseY > sliderY-20 &&
+    mouseY < sliderY+sliderH+20
+  ) {
+
+    draggingSlider = true;
+
+    updateSlider();
+  }
+
+  //
+  // SELECT PATCH
+  //
+
+  else {
+
+    selectedPatch++;
+
+    if(selectedPatch>=30) {
+
+      selectedPatch = 0;
+    }
+
+    sliderValue = map(
+      patchLift[selectedPatch],
+      -200,
+      300,
+      0,
+      1
+    );
+  }
+}
+
+void mouseDragged() {
+
+  //
+  // SLIDER
+  //
+
+  if(draggingSlider) {
+
+    updateSlider();
+  }
+
+  //
+  // ROTATION
+  //
+
+  else {
+
+    rotY += (mouseX-pmouseX)*0.01;
+
+    rotX += (mouseY-pmouseY)*0.01;
+  }
+}
+
+void mouseReleased() {
+
+  draggingSlider = false;
+}
+
+void updateSlider() {
+
+  sliderValue = constrain(
+    (mouseX-sliderX)/sliderW,
+    0,
+    1
+  );
+}
+
+//
+// ZOOM
+//
+
+void keyPressed() {
+
+  if(key=='+') {
+
+    zoom *= 1.1;
+  }
+
+  if(key=='-') {
+
+    zoom *= 0.9;
+  }
+}
