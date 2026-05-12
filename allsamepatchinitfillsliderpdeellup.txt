@@ -1,0 +1,453 @@
+//
+// APDE ANDROID
+// MASSIVE PDE PATCH GRID VISUALIZER
+// 5 x 6 = 30 PATCHES
+// ALL SAME SIMPLE BOUNDARY CONDITIONS
+// TOP    = x
+// BOTTOM = x^2
+// LEFT   = x^3
+// RIGHT  = x + 1
+// PROCESSING P3D
+//
+
+int N = 40;
+
+float[][] laplace;
+
+float rotX = PI/3.4;
+float rotY = 0;
+
+float zoom = 0.18;
+
+float time = 0;
+
+// GRID
+int COLS = 5;
+int ROWS = 6;
+
+int PATCH_SPACING = 330;
+
+// PATCH HEIGHTS
+float[] patchLift = new float[30];
+
+// SLIDER
+float sliderX;
+float sliderY;
+float sliderW = 500;
+float sliderH = 24;
+
+boolean draggingSlider = false;
+
+float sliderValue = 0.5;
+
+// ACTIVE PATCH
+int selectedPatch = 0;
+
+// PATCH NAMES
+String[] names = {
+
+  "PATCH 1",
+  "PATCH 2",
+  "PATCH 3",
+  "PATCH 4",
+  "PATCH 5",
+
+  "PATCH 6",
+  "PATCH 7",
+  "PATCH 8",
+  "PATCH 9",
+  "PATCH 10",
+
+  "PATCH 11",
+  "PATCH 12",
+  "PATCH 13",
+  "PATCH 14",
+  "PATCH 15",
+
+  "PATCH 16",
+  "PATCH 17",
+  "PATCH 18",
+  "PATCH 19",
+  "PATCH 20",
+
+  "PATCH 21",
+  "PATCH 22",
+  "PATCH 23",
+  "PATCH 24",
+  "PATCH 25",
+
+  "PATCH 26",
+  "PATCH 27",
+  "PATCH 28",
+  "PATCH 29",
+  "PATCH 30"
+};
+
+void setup() {
+
+  fullScreen(P3D);
+
+  smooth(8);
+
+  laplace = new float[N][N];
+
+  buildLaplace();
+
+  for (int i=0; i<30; i++) {
+    patchLift[i] = 0;
+  }
+
+  sliderX = width*0.5 - sliderW*0.5;
+  sliderY = height - 70;
+}
+
+void draw() {
+
+  background(0);
+
+  lights();
+
+  time += 0.01;
+
+  patchLift[selectedPatch] =
+    map(sliderValue, 0, 1, -200, 300);
+
+  pushMatrix();
+
+  translate(width*0.5, height*0.48);
+
+  scale(zoom);
+
+  rotateX(rotX);
+
+  rotateZ(rotY);
+
+  int index = 0;
+
+  for (int gy=0; gy<ROWS; gy++) {
+
+    for (int gx=0; gx<COLS; gx++) {
+
+      if (index >= 30) break;
+
+      pushMatrix();
+
+      translate(
+        (gx-(COLS-1)/2.0)*PATCH_SPACING,
+        (gy-(ROWS-1)/2.0)*PATCH_SPACING,
+        patchLift[index]
+      );
+
+      drawPatch(index);
+
+      popMatrix();
+
+      index++;
+    }
+  }
+
+  popMatrix();
+
+  drawHUD();
+
+  drawSlider();
+}
+
+void drawPatch(int mode) {
+
+  noStroke();
+
+  for (int y=0; y<N-1; y++) {
+
+    beginShape(TRIANGLE_STRIP);
+
+    for (int x=0; x<N; x++) {
+
+      float z1 = getZ(x, y);
+      float z2 = getZ(x, y+1);
+
+      fill(
+        constrain(120+z1*1.2, 0, 255),
+        constrain(140+z1*0.6, 0, 255),
+        constrain(255-z1*0.7, 0, 255)
+      );
+
+      vertex(x*8, y*8, z1);
+
+      fill(
+        constrain(120+z2*1.2, 0, 255),
+        constrain(140+z2*0.6, 0, 255),
+        constrain(255-z2*0.7, 0, 255)
+      );
+
+      vertex(x*8, (y+1)*8, z2);
+    }
+
+    endShape();
+  }
+
+  // OUTLINE
+  stroke(255, 70);
+
+  noFill();
+
+  rect(0, 0, N*8, N*8);
+
+  // LABEL
+  pushMatrix();
+
+  translate(60, N*8+40, 0);
+
+  rotateX(-rotX);
+
+  rotateZ(-rotY);
+
+  fill(255);
+
+  textSize(22);
+
+  text(names[mode], 0, 0);
+
+  popMatrix();
+}
+
+//
+// SAME SURFACE FOR ALL PATCHES
+//
+
+float getZ(int x, int y) {
+
+  return laplace[x][y];
+}
+
+//
+// BUILD LAPLACE PDE
+//
+
+void buildLaplace() {
+
+  //
+  // BOUNDARY CONDITIONS
+  //
+  // TOP    = x
+  // BOTTOM = x^2
+  // LEFT   = x^3
+  // RIGHT  = x + 1
+  //
+
+  for (int i=0; i<N; i++) {
+
+    float x = map(i, 0, N-1, 0, 10);
+
+    // TOP
+    laplace[i][0] = x;
+
+    // BOTTOM
+    laplace[i][N-1] = x*x;
+
+    // LEFT
+    laplace[0][i] = x*x*x;
+
+    // RIGHT
+    laplace[N-1][i] = x+1;
+  }
+
+  //
+  // LAPLACE RELAXATION
+  //
+
+  for (int iter=0; iter<5000; iter++) {
+
+    for (int i=1; i<N-1; i++) {
+
+      for (int j=1; j<N-1; j++) {
+
+        laplace[i][j] = 0.25 * (
+
+          laplace[i+1][j] +
+          laplace[i-1][j] +
+          laplace[i][j+1] +
+          laplace[i][j-1]
+
+        );
+      }
+    }
+  }
+}
+
+//
+// HUD
+//
+
+void drawHUD() {
+
+  fill(255);
+
+  textSize(28);
+
+  text(
+    "30 PDE PATCHES  |  SAME BOUNDARY CONDITIONS",
+    20,
+    40
+  );
+
+  textSize(22);
+
+  text(
+    "ACTIVE PATCH : " + names[selectedPatch],
+    20,
+    80
+  );
+
+  text(
+    "TOP=x   BOTTOM=x^2   LEFT=x^3   RIGHT=x+1",
+    20,
+    120
+  );
+
+  text(
+    "DRAG = ROTATE    + / - = ZOOM",
+    20,
+    160
+  );
+}
+
+//
+// SLIDER
+//
+
+void drawSlider() {
+
+  noStroke();
+
+  fill(60);
+
+  rect(
+    sliderX,
+    sliderY,
+    sliderW,
+    sliderH,
+    20
+  );
+
+  fill(0, 200, 255);
+
+  rect(
+    sliderX,
+    sliderY,
+    sliderW*sliderValue,
+    sliderH,
+    20
+  );
+
+  float knobX =
+    sliderX + sliderW*sliderValue;
+
+  fill(255);
+
+  ellipse(
+    knobX,
+    sliderY+sliderH*0.5,
+    40,
+    40
+  );
+
+  fill(255);
+
+  textSize(20);
+
+  text(
+    "PATCH HEIGHT",
+    sliderX,
+    sliderY-15
+  );
+}
+
+//
+// TOUCH
+//
+
+void mousePressed() {
+
+  // SLIDER TOUCH
+  if (
+
+    mouseX > sliderX &&
+    mouseX < sliderX+sliderW &&
+    mouseY > sliderY-20 &&
+    mouseY < sliderY+sliderH+20
+
+  ) {
+
+    draggingSlider = true;
+
+    updateSlider();
+  }
+
+  // SELECT PATCH
+  else {
+
+    selectedPatch++;
+
+    if (selectedPatch >= 30) {
+      selectedPatch = 0;
+    }
+
+    sliderValue = map(
+      patchLift[selectedPatch],
+      -200,
+      300,
+      0,
+      1
+    );
+  }
+}
+
+void mouseDragged() {
+
+  // SLIDER
+  if (draggingSlider) {
+
+    updateSlider();
+  }
+
+  // ROTATION
+  else {
+
+    rotY += (mouseX-pmouseX)*0.01;
+
+    rotX += (mouseY-pmouseY)*0.01;
+  }
+}
+
+void mouseReleased() {
+
+  draggingSlider = false;
+}
+
+void updateSlider() {
+
+  sliderValue =
+    constrain(
+      (mouseX-sliderX)/sliderW,
+      0,
+      1
+    );
+}
+
+//
+// ZOOM
+//
+
+void keyPressed() {
+
+  if (key=='+') {
+
+    zoom *= 1.1;
+  }
+
+  if (key=='-') {
+
+    zoom *= 0.9;
+  }
+}
